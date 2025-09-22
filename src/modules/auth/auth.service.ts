@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
-import { ISignInBodyInputsDTO, ISignUpBodyInputsDTO } from "./auth.DTO";
+import { ISignInBodyInputsDTO, ISignUpBodyInputsDTO, IVerifyOtpBodyInputsDTO } from "./auth.DTO";
 import UserModel from "../../DB/model/User.model.js";
 import { UserRepository } from "../../DB/repository/user.repository.js";
 import { ConflictException } from "../../utils/response/error.response.js";
-import { hashData } from "../../utils/security/hash.utils.js";
+import { compareData, hashData } from "../../utils/security/hash.utils.js";
 import { emailEvent } from "../../utils/events/email.event.js";
 import { html } from "../../utils/Email/email.template.js";
 import { generateOtp } from "../../utils/Email/Otp.js";
@@ -43,6 +43,29 @@ class AuthService {
             data: { newUser }
         });
     }
+
+    /**
+     * 
+     * @param req 
+     * @param res 
+     * @returns - Promise<Response>
+     * @description - This function handles email verification
+     * @example ({ email, otp }: IVerifyOtpBodyInputsDTO)
+     * return {message: 'Email verified successfully', statusCode: 200}
+     */
+    verifyEmail = async (req: Request, res: Response): Promise<Response> => {
+        const { email, otp }: IVerifyOtpBodyInputsDTO = req.body;
+        const user = await this.userModel.findOne({ filter: { email, confirmedEmailOtp: { $exists: true }, confirmedAt: { $exists: false } } });
+        if (!user) {
+            throw new ConflictException('Invalid request or Email already verified');
+        }
+        if (!(await compareData(otp, user.confirmedEmailOtp!))) {
+            throw new ConflictException('Invalid OTP');
+        }
+        await this.userModel.updateOne({ filter: { email }, update: { confirmedAt: new Date().toLocaleString(), $unset: { confirmedEmailOtp: 1 } } });
+        return res.json({ message: 'Email verified successfully' });
+    }
+
     login = (req: Request, res: Response): Response => {
         const { email, password }: ISignInBodyInputsDTO = req.body;
         return res.json({ message: 'Login route', data: { email, password } });

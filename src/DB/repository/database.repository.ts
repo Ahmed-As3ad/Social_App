@@ -1,4 +1,4 @@
-import { FlattenMaps, PopulateOptions, ProjectionType, QueryOptions } from "mongoose";
+import { FlattenMaps, MongooseUpdateQueryOptions, PopulateOptions, ProjectionType, QueryOptions, QueryWithHelpers, UpdateQuery, UpdateWriteOpResult } from "mongoose";
 import { CreateOptions, HydratedDocument, Model, RootFilterQuery } from "mongoose";
 
 // Type Lean
@@ -15,6 +15,14 @@ export abstract class DataRepository<TDocument> {
             doc.lean(options?.lean);
         }
         return doc.exec();
+    }
+
+    async updateOne({ filter, update, options }: { filter?: RootFilterQuery<TDocument>, update?: UpdateQuery<TDocument>, options?: MongooseUpdateQueryOptions<TDocument> | null }): Promise<QueryWithHelpers<UpdateWriteOpResult, TDocument>> {
+        return this.model.updateOne({
+            filter,
+            ...update, $inc: { __v: 1 },
+            options
+        });
     }
 
     async create({ data, options }: { data: Partial<TDocument>[], options?: CreateOptions }): Promise<HydratedDocument<TDocument>[] | undefined> {

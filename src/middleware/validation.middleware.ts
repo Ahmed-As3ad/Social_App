@@ -43,5 +43,6 @@ export const generalFieldValidator = {
     firstName: z.string().min(3, 'first name must be at least 3 characters long').max(30, 'first name must be at most 30 characters long'),
     lastName: z.string().min(3, 'last name must be at least 3 characters long').max(30, 'last name must be at most 30 characters long'),
     email: z.string().email('invalid email format'),
-    password: z.string().min(6, 'password must be at least 6 characters long').max(100, 'password must be at most 100 characters long')
+    password: z.string().min(6, 'password must be at least 6 characters long').max(100, 'password must be at most 100 characters long'),
+    otp: z.string().regex(/^\d{6}$/, 'OTP must be a 6-digit number')
 }

@@ -26,3 +26,10 @@ export const signUpValidate = {
         }
     })
 }
+
+export const verifyEmailValidate = {
+    body: z.strictObject({
+        email: generalFieldValidator.email,
+        otp: generalFieldValidator.otp
+    })
+}
