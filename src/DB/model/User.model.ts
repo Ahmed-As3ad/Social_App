@@ -1,4 +1,4 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose, { HydratedDocument, Schema } from "mongoose";
 
 export enum GenderEnum {
     male = "male",
@@ -42,47 +42,48 @@ const userSchema = new Schema<IUser>({
     DOB: { type: String, required: true, trim: true },
     phone: { type: String, trim: true },
     address: { type: String, trim: true },
-    gender: { type: String, enum: Object.values(GenderEnum), default: GenderEnum.male},
-    role: { type: String, enum: Object.values(RoleEnum) },
+    gender: { type: String, enum: Object.values(GenderEnum), default: GenderEnum.male },
+    role: { type: String, enum: Object.values(RoleEnum), default: RoleEnum.user },
 }, {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true }
 })
 
-userSchema.virtual('fullName').set(function(value: string) {
+userSchema.virtual('fullName').set(function (value: string) {
     if (!value || typeof value !== 'string') return;
-    
+
     const names = value.trim().split(/\s+/);
-    
+
     if (names.length === 1) {
         this.set({ firstName: names[0], lastName: '' });
     } else if (names.length === 2) {
         this.set({ firstName: names[0], lastName: names[1] });
     } else {
-        this.set({ 
-            firstName: names[0], 
-            lastName: names[names.length - 1] 
+        this.set({
+            firstName: names[0],
+            lastName: names[names.length - 1]
         });
     }
-}).get(function() {
+}).get(function () {
     return `${this.firstName} ${this.lastName}`.trim();
 });
 
-userSchema.virtual('age').get(function() {
+userSchema.virtual('age').get(function () {
     const birthDate = new Date(this.DOB);
     const today = new Date();
-    
+
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
-    
+
     // If birthday hasn't occurred this year yet, subtract 1 from age
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
         age--;
     }
-    
+
     return age;
 })
 
 const UserModel = mongoose.models.User || mongoose.model<IUser>('User', userSchema);
+export type HUserDocument = HydratedDocument<IUser>;
 export default UserModel;

@@ -7,6 +7,7 @@ import { compareData, hashData } from "../../utils/security/hash.utils.js";
 import { emailEvent } from "../../utils/events/email.event.js";
 import { html } from "../../utils/Email/email.template.js";
 import { generateOtp } from "../../utils/Email/Otp.js";
+import { generateCredentialsToken } from "../../utils/security/token.security.js";
 
 
 class AuthService {
@@ -66,10 +67,19 @@ class AuthService {
         return res.json({ message: 'Email verified successfully' });
     }
 
+    /**
+     * 
+     * @param req - Express Request
+     * @param res - Express Response
+     * @returns - Promise<Response>
+     * @description - This function handles user login
+     * @example ({ email, password }: ISignInBodyInputsDTO)
+     * return {message: 'Login successful', statusCode: 200, tokens: { accessToken, refreshToken }}
+     */
     login = async (req: Request, res: Response): Promise<Response> => {
         const { email, password }: ISignInBodyInputsDTO = req.body;
         const user = await this.userModel.findOne({ filter: { email }, select: 'email firstName lastName DOB confirmedAt role password' });
-        
+
         if (!user) {
             throw new ConflictException('Invalid credentials');
         }
@@ -80,12 +90,11 @@ class AuthService {
             throw new BadRequestException('Please verify your email to login');
         }
 
-        // Remove password from response data
-        const { password: _, ...userWithoutPassword } = user.toObject();
-        
-        return res.json({ 
-            message: 'Login successful', 
-            data: userWithoutPassword 
+        const { accessToken, refreshToken } = await generateCredentialsToken(user);
+
+        return res.json({
+            message: 'Login successful',
+            tokens: { accessToken, refreshToken }
         });
     }
 }
