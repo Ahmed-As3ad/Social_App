@@ -8,5 +8,5 @@ const router: Router = Router();
 
 router.post(endPoint.signup!, validation(validators.signUpValidate), authService.signUp)
 router.patch(endPoint.verifyEmail!, validation(validators.verifyEmailValidate), authService.verifyEmail)
-// router.post(endPoint.login!, authService.login)
+router.post(endPoint.login!, authService.login)
 export default router;

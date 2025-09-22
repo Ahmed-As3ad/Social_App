@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { ISignInBodyInputsDTO, ISignUpBodyInputsDTO, IVerifyOtpBodyInputsDTO } from "./auth.DTO";
 import UserModel from "../../DB/model/User.model.js";
 import { UserRepository } from "../../DB/repository/user.repository.js";
-import { ConflictException } from "../../utils/response/error.response.js";
+import { BadRequestException, ConflictException } from "../../utils/response/error.response.js";
 import { compareData, hashData } from "../../utils/security/hash.utils.js";
 import { emailEvent } from "../../utils/events/email.event.js";
 import { html } from "../../utils/Email/email.template.js";
@@ -66,9 +66,27 @@ class AuthService {
         return res.json({ message: 'Email verified successfully' });
     }
 
-    login = (req: Request, res: Response): Response => {
+    login = async (req: Request, res: Response): Promise<Response> => {
         const { email, password }: ISignInBodyInputsDTO = req.body;
-        return res.json({ message: 'Login route', data: { email, password } });
+        const user = await this.userModel.findOne({ filter: { email }, select: 'email firstName lastName DOB confirmedAt role password' });
+        
+        if (!user) {
+            throw new ConflictException('Invalid credentials');
+        }
+        if (!(await compareData(password, user.password))) {
+            throw new ConflictException('Invalid credentials');
+        }
+        if (!user.confirmedAt) {
+            throw new BadRequestException('Please verify your email to login');
+        }
+
+        // Remove password from response data
+        const { password: _, ...userWithoutPassword } = user.toObject();
+        
+        return res.json({ 
+            message: 'Login successful', 
+            data: userWithoutPassword 
+        });
     }
 }
 export default new AuthService();
