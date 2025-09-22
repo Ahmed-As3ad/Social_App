@@ -27,7 +27,6 @@ class AuthService {
 
         const { firstName, lastName, email, password, DOB }: ISignUpBodyInputsDTO = req.body;
         const checkUser = await this.userModel.findOne({ filter: { email }, options: { lean: true }, select: 'email' });
-        console.log(checkUser);
 
         if (checkUser) {
             throw new ConflictException('Email already in use');

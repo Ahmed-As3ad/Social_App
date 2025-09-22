@@ -1,5 +1,6 @@
 import { createTransport } from 'nodemailer';
 import Mail from 'nodemailer/lib/mailer/index.js';
+import { BadRequestException } from '../response/error.response.js';
 
 interface IMailData extends Mail.Options {
     otp: number;
@@ -15,15 +16,13 @@ export const sendMail = async (data: IMailData): Promise<void> => {
             }
         });
 
-        const info = await transporter.sendMail({
+        await transporter.sendMail({
             from: `"Social App💌" <${process.env.EMAIL_USER}>`,
             ...data
         });
-        console.log("✅ Email sent:", info.messageId);
 
     } catch (error) {
-        console.error("❌ Failed to send email:", error);
-        throw error;
+        throw new BadRequestException('Failed to send email');
     }
 }
 

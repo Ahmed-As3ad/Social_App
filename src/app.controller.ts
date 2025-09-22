@@ -13,7 +13,6 @@ import rateLimit from 'express-rate-limit';
 import authController from './modules/auth/auth.controller';
 import { handleError } from './utils/response/error.response.js';
 import connectDb from './DB/connect.db.js';
-import { generateOtp } from './utils/Email/Otp.js';
 
 // initialize rate limiter
 const limiter = rateLimit({
@@ -46,9 +45,8 @@ const bootstrap = async (): Promise<void> => {
             message: `route not found, please check the api documentation at ${process.env.APPLICATION_NAME} docs ❌`
         });
     });
-generateOtp()
-    // global error handler
-    app.use(handleError);
+// global error handler
+app.use(handleError);
 
     app.listen(port, () => {
         console.log(`app is running at http://localhost:${port}🎉`);

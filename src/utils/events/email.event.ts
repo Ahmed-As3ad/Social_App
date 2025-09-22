@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { sendMail } from '../Email/email.utils.js';
+import { BadRequestException } from '../response/error.response.js';
 
 export const emailEvent = new EventEmitter();
 
@@ -12,6 +13,6 @@ emailEvent.on('sendEmail', async (emailData: { to: string; html: string; subject
             otp: emailData.otp
         });
     } catch (error) {
-        console.error('Failed to send email:', error);
+        throw new BadRequestException('Failed to send email');
     }
 })
