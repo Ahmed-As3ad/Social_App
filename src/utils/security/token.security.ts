@@ -67,28 +67,43 @@ export const generateCredentialsToken = async (user: HUserDocument): Promise<{ a
     return { accessToken, refreshToken };
 }
 
-export const decodedToken = async ({ authorization, tokenType }: { authorization: string, tokenType?: TokenEnum }): Promise<JwtPayload> => {
-    const userModel = new UserRepository(UserModel);
+export const revokeToken = async (decoded: JwtPayload) => {
     const tokenModel = new TokenRepository(TokenModel);
-    const [bearerKey, token] = authorization.split(' ');
-    if (!bearerKey || !token) {
-        throw new BadRequestException('Invalid token format');
+    const result = await tokenModel.create({
+        data: [{
+            jti: decoded?.jti as string,
+            expiresIn: decoded?.iat as number + Number(process.env.JWT_EXPIRES_IN_REFRESH),
+            userId: decoded?.id
+        }]
+    })
+    if (!result || result.length === 0) {
+        throw new BadRequestException('Failed to revoke token');
     }
-    const signatures = await generateSecretToken(bearerKey as TokenTypeEnum);
-    const decoded = await verify(token, tokenType === TokenEnum.refresh ? signatures.refresh : signatures.access) as JwtPayload;
-    if (!decoded.id || !decoded.iat) {
-        throw new BadRequestException('Invalid token payload');
-    }
-    if (await tokenModel.findOne({ filter: { jti: decoded?.jti } })) {
-        throw new ForbiddenException('Token is revoked, please login again');
-    }
-
-    const user = await userModel.findOne({ filter: { _id: decoded?.id } });
-    if (!user) {
-        throw new BadRequestException('User not found');
-    }
-    if (user?.changeCredentialsTime?.getTime() > decoded?.iat * 1000) {
-        throw new ForbiddenException('Token is expired, please login again');
-    }
-    return { user, decoded };
+    return result;
 }
+
+    export const decodedToken = async ({ authorization, tokenType }: { authorization: string, tokenType?: TokenEnum }): Promise<JwtPayload> => {
+        const userModel = new UserRepository(UserModel);
+        const tokenModel = new TokenRepository(TokenModel);
+        const [bearerKey, token] = authorization.split(' ');
+        if (!bearerKey || !token) {
+            throw new BadRequestException('Invalid token format');
+        }
+        const signatures = await generateSecretToken(bearerKey as TokenTypeEnum);
+        const decoded = await verify(token, tokenType === TokenEnum.refresh ? signatures.refresh : signatures.access) as JwtPayload;
+        if (!decoded.id || !decoded.iat) {
+            throw new BadRequestException('Invalid token payload');
+        }
+        if (await tokenModel.findOne({ filter: { jti: decoded?.jti } })) {
+            throw new ForbiddenException('Token is revoked, please login again');
+        }
+
+        const user = await userModel.findOne({ filter: { _id: decoded?.id } });
+        if (!user) {
+            throw new BadRequestException('User not found');
+        }
+        if ((user?.changeCredentialsTime?.getTime() || 0) > decoded?.iat * 1000) {
+            throw new ForbiddenException('Token is expired, please login again');
+        }
+        return { user, decoded };
+    }

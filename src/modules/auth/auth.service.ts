@@ -7,7 +7,8 @@ import { compareData, hashData } from "../../utils/security/hash.utils.js";
 import { emailEvent } from "../../utils/events/email.event.js";
 import { html } from "../../utils/Email/email.template.js";
 import { generateOtp } from "../../utils/Email/Otp.js";
-import { generateCredentialsToken } from "../../utils/security/token.security.js";
+import { generateCredentialsToken, revokeToken } from "../../utils/security/token.security.js";
+import { JwtPayload } from "jsonwebtoken";
 
 
 class AuthService {
@@ -94,6 +95,14 @@ class AuthService {
 
         return res.json({
             message: 'Login successful',
+            tokens: { accessToken, refreshToken }
+        });
+    }
+    refreshToken = async (req: Request, res: Response): Promise<Response> => {
+        const { accessToken, refreshToken } = await generateCredentialsToken(req.user!);
+        await revokeToken(req.decoded as JwtPayload);
+        return res.json({
+            message: 'Token refreshed successfully',
             tokens: { accessToken, refreshToken }
         });
     }
