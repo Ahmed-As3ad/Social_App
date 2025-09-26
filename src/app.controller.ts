@@ -11,8 +11,9 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 // import controllers
 import authController from './modules/auth/auth.controller';
-import { handleError } from './utils/response/error.response.js';
+import { handleError } from './utils/response/error.response';
 import connectDb from './DB/connect.db.js';
+import userController from './modules/user/user.controller';
 
 // initialize rate limiter
 const limiter = rateLimit({
@@ -38,6 +39,7 @@ const bootstrap = async (): Promise<void> => {
 
     // routes
     app.use('/api/auth', authController);
+    app.use('/api/user', userController);
 
     // handle invalid routes
     app.use('{/*dummy}', (req: Request, res: Response) => {
