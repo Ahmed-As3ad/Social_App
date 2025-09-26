@@ -33,6 +33,11 @@ export class ConflictException extends ErrorResponseException {
         super(message, 409, cause);
     }
 }
+export class ForbiddenException extends ErrorResponseException {
+    constructor(message: string, cause?: unknown) {
+        super(message, 403, cause);
+    }
+}
 
 // global error handler middleware
 export const handleError = (err: IErrorResponse, req: Request, res: Response, next: NextFunction): Response => {

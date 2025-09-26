@@ -27,7 +27,8 @@ const limiter = rateLimit({
 const bootstrap = async (): Promise<void> => {
     const app: Express = express();
     const port: number | string = process.env.PORT || 5000;
-    app.use(express.json(), cors(), helmet(), limiter);
+    app.use(express.json());
+    app.use(cors(), helmet(), limiter);
 
     // DB
     await connectDb()
