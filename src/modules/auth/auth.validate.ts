@@ -33,3 +33,9 @@ export const verifyEmailValidate = {
         otp: generalFieldValidator.otp
     })
 }
+
+export const signUpWithGmail = {
+    body: z.strictObject({
+        idToken: z.string().min(1, 'idToken is required').max(500, 'idToken must be at most 500 characters long')
+    })
+}

@@ -9,6 +9,10 @@ export enum RoleEnum {
     user = "user",
     admin = "admin"
 }
+export enum providerEnum{
+    google = "google",
+    system = "system"
+}
 
 export interface IUser {
     firstName: string,
@@ -17,6 +21,7 @@ export interface IUser {
     email: string,
     confirmedEmailOtp?: string,
     confirmedAt: Date,
+    avatar?: string,
     password: string,
     resetPasswordOtp: string,
     changeCredentialsTime: Date,
@@ -26,6 +31,7 @@ export interface IUser {
     address?: string,
     gender: GenderEnum,
     role: RoleEnum,
+    provider: providerEnum,
     createdAt: Date,
     updatedAt?: Date
 }
@@ -36,14 +42,16 @@ const userSchema = new Schema<IUser>({
     email: { type: String, required: true, trim: true, unique: true },
     confirmedEmailOtp: { type: String, trim: true },
     confirmedAt: { type: Date },
-    password: { type: String, required: true, trim: true },
+    avatar: { type: String, trim: true },
+    password: { type: String, required: function(){ return this.provider === providerEnum.system? true : false }, trim: true },
     resetPasswordOtp: { type: String, trim: true },
     changeCredentialsTime: { type: Date },
-    DOB: { type: String, required: true, trim: true },
+    DOB: { type: String, required: function(){ return this.provider === providerEnum.system? true : false }, trim: true },
     phone: { type: String, trim: true },
     address: { type: String, trim: true },
     gender: { type: String, enum: Object.values(GenderEnum), default: GenderEnum.male },
     role: { type: String, enum: Object.values(RoleEnum), default: RoleEnum.user },
+    provider: { type: String, enum: Object.values(providerEnum), default: providerEnum.system },
 }, {
     timestamps: true,
     toJSON: { virtuals: true },

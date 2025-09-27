@@ -3,15 +3,13 @@ import { logoutDTO } from "./user.DTO.js";
 import { LogoutEnum, revokeToken } from "../../utils/security/token.security.js";
 import { UserRepository } from "../../DB/repository/user.repository.js";
 import UserModel, { IUser } from "../../DB/model/User.model.js";
-import { TokenRepository } from "../../DB/repository/token.repository.js";
-import TokenModel from "../../DB/model/Token.model.js";
 import { UpdateQuery } from "mongoose";
-import { Jwt, JwtPayload } from "jsonwebtoken";
+import { JwtPayload } from "jsonwebtoken";
 
 
 class userService {
     private userModel = new UserRepository(UserModel);
-    private tokenModel = new TokenRepository(TokenModel);
+    // private tokenModel = new TokenRepository(TokenModel);
 
     constructor() { }
     profile = async (req: Request, res: Response): Promise<Response> => {

@@ -1,14 +1,15 @@
 import { Request, Response } from "express";
-import { ISignInBodyInputsDTO, ISignUpBodyInputsDTO, IVerifyOtpBodyInputsDTO } from "./auth.DTO";
-import UserModel from "../../DB/model/User.model.js";
+import { ISignInBodyInputsDTO, ISignUpBodyInputsDTO, ISignUpGmailDTO, IVerifyOtpBodyInputsDTO } from "./auth.DTO";
+import UserModel, { providerEnum } from "../../DB/model/User.model.js";
 import { UserRepository } from "../../DB/repository/user.repository.js";
-import { BadRequestException, ConflictException } from "../../utils/response/error.response.js";
+import { BadRequestException, ConflictException, NotFoundException } from "../../utils/response/error.response.js";
 import { compareData, hashData } from "../../utils/security/hash.utils.js";
 import { emailEvent } from "../../utils/events/email.event.js";
 import { html } from "../../utils/Email/email.template.js";
 import { generateOtp } from "../../utils/Email/Otp.js";
 import { generateCredentialsToken, revokeToken } from "../../utils/security/token.security.js";
 import { JwtPayload } from "jsonwebtoken";
+import { OAuth2Client, type TokenPayload } from "google-auth-library";
 
 
 class AuthService {
@@ -36,7 +37,9 @@ class AuthService {
         const otp = generateOtp();
         const newUser = await this.userModel.createUser({ data: [{ firstName, lastName, email, password: await hashData(password), DOB, confirmedEmailOtp: await hashData(String(otp)) }] });
 
-        // Send welcome email
+        /**
+         * Send welcome email with OTP
+         */
         const emailData = { to: email, subject: 'Confirm your email✉️', html: html(firstName, otp) };
         emailEvent.emit('sendEmail', emailData);
 
@@ -44,6 +47,84 @@ class AuthService {
             message: 'Registered Successfully',
             data: { newUser }
         });
+    }
+
+    /**
+     * 
+     * @param idToken - Google ID Token
+     * @returns - Promise<TokenPayload>
+     * @description - This function verifies Google ID Token and returns the token payload
+     * @example (idToken)
+     * return { email: '<email>', name: '<name>', picture: '<picture>' }
+     */
+    private async verifyGmailToken(idToken: string): Promise<TokenPayload> {
+        const client = new OAuth2Client();
+        const ticket = await client.verifyIdToken({
+            idToken,
+            audience: process.env.WEB_CLIENT_ID?.split(',') || [],
+        });
+        const payload = ticket.getPayload();
+        if (!payload?.email_verified) {
+            throw new BadRequestException('Email not verified by Google');
+        }
+        return payload;
+    }
+
+    /**
+     * 
+     * @param req - Express Request
+     * @param res - Express Response
+     * @returns - Promise<Response>
+     * @description - This function handles user signup with Google
+     * @example ({ idToken }: ISignUpGmailDTO)
+     * return {message: 'Registered Successfully', statusCode: 201}
+     */
+    signUpWithGmail = async (req: Request, res: Response): Promise<Response> => {
+        const { idToken }: ISignUpGmailDTO = req.body;
+        const { email, given_name, family_name, picture }: TokenPayload = await this.verifyGmailToken(idToken);
+        const user = await this.userModel.findOne({ filter: { email } });
+        if (user) {
+            if (user.provider === providerEnum.google) {
+                return await this.signInWithGmail(req, res);
+            }
+            throw new ConflictException(`Email already registered with ${user.provider}, please use ${user.provider} to login`);
+        }
+        const newUser = await this.userModel.createUser({
+            data: [{
+                firstName: given_name as string,
+                lastName: family_name as string,
+                email: email as string,
+                provider: providerEnum.google,
+                avatar: picture as string,
+                confirmedAt: new Date()
+            }]
+        })
+        if (!newUser) {
+            throw new BadRequestException('Failed to create user with Google');
+        }
+        const credentials = await generateCredentialsToken(newUser);
+        return res.status(201).json({ message: "Registered Successfully", newUser, tokens: { credentials } });
+    }
+
+    /**
+     * 
+     * @param req - Express Request
+     * @param res - Express Response
+     * @returns - Promise<Response>
+     * @description - This function handles user signin with Google
+     * @example ({ idToken }: ISignUpGmailDTO)
+     * return {message: 'Login successful', statusCode: 200}
+     */
+    signInWithGmail = async (req: Request, res: Response): Promise<Response> => {
+        const { idToken }: ISignUpGmailDTO = req.body;
+        const { email }: TokenPayload = await this.verifyGmailToken(idToken);
+        const user = await this.userModel.findOne({ filter: { email, provider: providerEnum.google } });
+        if (!user) {
+            throw new NotFoundException('Email not registered, please sign up first');
+        }
+
+        const credentials = await generateCredentialsToken(user);
+        return res.json({ message: "Login successful", tokens: { credentials } });
     }
 
     /**
@@ -79,7 +160,7 @@ class AuthService {
      */
     login = async (req: Request, res: Response): Promise<Response> => {
         const { email, password }: ISignInBodyInputsDTO = req.body;
-        const user = await this.userModel.findOne({ filter: { email }, select: 'email firstName lastName DOB confirmedAt role password' });
+        const user = await this.userModel.findOne({ filter: { email, provider: providerEnum.system }, select: 'email firstName lastName DOB confirmedAt role password' });
 
         if (!user) {
             throw new ConflictException('Invalid credentials');
@@ -98,6 +179,16 @@ class AuthService {
             tokens: { accessToken, refreshToken }
         });
     }
+
+    /**
+     * 
+     * @param req - Express Request
+     * @param res - Express Response
+     * @returns - Promise<Response>
+     * @description - This function handles token refresh
+     * @example ({ user }: IRefreshTokenBodyInputsDTO)
+     * return {message: 'Generated new tokens successfully', statusCode: 200}
+     */
     refreshToken = async (req: Request, res: Response): Promise<Response> => {
         const { accessToken, refreshToken } = await generateCredentialsToken(req.user!);
         await revokeToken(req.decoded as JwtPayload);
