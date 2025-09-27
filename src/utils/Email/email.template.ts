@@ -7,7 +7,8 @@ export const html = (name: string, otp: number): string => {
                         
                         <div style="color: #489BDA; font-size: 25px; font-weight: bold; line-height: 35px; margin: 20px 0;">
                             Your OTP IS:<br>
-                            <span style="font-size: 18px; color: #489BDA;">${otp}</span>
+                            <span style="font-size: 18px; color: #489BDA;">${otp}</span><br>
+                            <span style="font-size: 15px; color: #da4848ff;">OTP Valid for 3 minutes!</span>
                         </div>
                         
                         <div style="color: #000000; font-size: 14px; margin-top: 40px;">

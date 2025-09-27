@@ -4,7 +4,8 @@ const endPoint: { [key: string]: string } = {
     logout: '/logout',
     // resendOtp: '/resend-otp',
     // forgotPassword: '/forgot-password',
-    // resetPassword: '/reset-password',
+    resetPasswordCode: '/reset-password-code',
+    resetPassword: '/reset-password',
     // changePassword: '/change-password'
 }
 export default endPoint;

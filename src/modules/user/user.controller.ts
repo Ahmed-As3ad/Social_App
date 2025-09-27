@@ -7,4 +7,6 @@ import { validation } from "../../middleware/validation.middleware.js";
 const router: Router = Router();
 router.get(endPoint.profile!, authentication(), userService.profile)
 router.post(endPoint.logout!, authentication(), validation(validate.logoutValidate), userService.logout)
+router.post(endPoint.resetPasswordCode!, validation(validate.resetPasswordCodeValidate), userService.resetPasswordCode)
+router.patch(endPoint.resetPassword!, validation(validate.resetPasswordValidate), userService.resetPasswordVerify)
 export default router;

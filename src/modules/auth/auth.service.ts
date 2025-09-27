@@ -35,7 +35,7 @@ class AuthService {
             throw new ConflictException('Email already in use');
         }
         const otp = generateOtp();
-        const newUser = await this.userModel.createUser({ data: [{ firstName, lastName, email, password: await hashData(password), DOB, confirmedEmailOtp: await hashData(String(otp)) }] });
+        const newUser = await this.userModel.createUser({ data: [{ firstName, lastName, email, password: await hashData(password), DOB, confirmedEmailOtp: await hashData(String(otp)), otpExpire: new Date(Date.now() + 3 * 60 * 1000) }] });
 
         /**
          * Send welcome email with OTP
@@ -145,7 +145,10 @@ class AuthService {
         if (!(await compareData(otp, user.confirmedEmailOtp!))) {
             throw new ConflictException('Invalid OTP');
         }
-        await this.userModel.updateOne({ filter: { email }, update: { confirmedAt: new Date().toLocaleString(), $unset: { confirmedEmailOtp: 1 } } });
+        if (user.otpExpire && new Date() > user.otpExpire) {
+            throw new BadRequestException('OTP has expired, please request a new one');
+        }
+        await this.userModel.updateOne({ filter: { email }, update: { confirmedAt: new Date().toLocaleString(), $unset: { confirmedEmailOtp: 1, otpExpire: 1 } } });
         return res.json({ message: 'Email verified successfully' });
     }
 
@@ -163,10 +166,10 @@ class AuthService {
         const user = await this.userModel.findOne({ filter: { email, provider: providerEnum.system }, select: 'email firstName lastName DOB confirmedAt role password' });
 
         if (!user) {
-            throw new ConflictException('Invalid credentials');
+            throw new ConflictException('Invalid email or password');
         }
         if (!(await compareData(password, user.password))) {
-            throw new ConflictException('Invalid credentials');
+            throw new ConflictException('Invalid email or password');
         }
         if (!user.confirmedAt) {
             throw new BadRequestException('Please verify your email to login');
