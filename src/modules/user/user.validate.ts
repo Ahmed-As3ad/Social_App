@@ -1,6 +1,7 @@
 import z from "zod";
 import { LogoutEnum } from "../../utils/security/token.security.js";
 import { generalFieldValidator } from "../../middleware/validation.middleware.js";
+import { Types } from "mongoose";
 
 export const logoutValidate = {
     body: z.strictObject({
@@ -23,5 +24,31 @@ export const resetPasswordValidate = {
     }).refine((data) => data.newPassword === data.confirmNewPassword, {
         message: "confirm password does not match",
         path: ["confirmNewPassword"]
+    })
+}
+
+export const FreezeAccountValidate = {
+    params: z.object({
+        userId: z.string().optional(),
+    }
+    ).refine((data) => {
+        return data?.userId ? Types.ObjectId.isValid(data?.userId) : true
+    }, { error: "invalid user id", path: ["userId"] }),
+    body: z.strictObject({
+        reason: z.string().min(10, 'reason must be at least 10 characters long').max(300, 'reason must be at most 300 characters long')
+    })
+}
+
+export const UnFreezeAccountValidate = {
+    params: z.strictObject({
+        userId: z.string().refine((id) => Types.ObjectId.isValid(id), { error: "invalid user id", path: ["userId"] })
+    })
+}
+
+export const DeleteAccountValidate = {
+    params: z.strictObject({
+        userId: z.string().optional().refine((id) => {
+            return id ? Types.ObjectId.isValid(id) : true
+        }, { error: "invalid user id", path: ["userId"] })
     })
 }

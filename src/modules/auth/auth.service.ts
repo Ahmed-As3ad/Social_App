@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { ISignInBodyInputsDTO, ISignUpBodyInputsDTO, ISignUpGmailDTO, IVerifyOtpBodyInputsDTO } from "./auth.DTO";
 import UserModel, { providerEnum } from "../../DB/model/User.model.js";
 import { UserRepository } from "../../DB/repository/user.repository.js";
-import { BadRequestException, ConflictException, NotFoundException } from "../../utils/response/error.response.js";
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "../../utils/response/error.response.js";
 import { compareData, hashData } from "../../utils/security/hash.utils.js";
 import { emailEvent } from "../../utils/events/email.event.js";
 import { html } from "../../utils/Email/email.template.js";
@@ -10,6 +10,8 @@ import { generateOtp } from "../../utils/Email/Otp.js";
 import { generateCredentialsToken, revokeToken } from "../../utils/security/token.security.js";
 import { JwtPayload } from "jsonwebtoken";
 import { OAuth2Client, type TokenPayload } from "google-auth-library";
+import { SuccessResponse } from "../../utils/response/success.response.js";
+import { ILogin } from "./auth.entities.js";
 
 
 class AuthService {
@@ -43,12 +45,8 @@ class AuthService {
         const emailData = { to: email, subject: 'Confirm your email✉️', html: html(firstName, otp) };
         emailEvent.emit('sendEmail', emailData);
 
-        return res.status(201).json({
-            message: 'Registered Successfully',
-            data: { newUser }
-        });
+        return SuccessResponse({ res, message: 'Registered Successfully', data: { newUser } });
     }
-
     /**
      * 
      * @param idToken - Google ID Token
@@ -98,12 +96,12 @@ class AuthService {
                 avatar: picture as string,
                 confirmedAt: new Date()
             }]
-        })
+        });
         if (!newUser) {
             throw new BadRequestException('Failed to create user with Google');
         }
-        const credentials = await generateCredentialsToken(newUser);
-        return res.status(201).json({ message: "Registered Successfully", newUser, tokens: { credentials } });
+        const { accessToken, refreshToken } = await generateCredentialsToken(newUser);
+        return SuccessResponse<ILogin>({ res, message: "Registered Successfully", data: { tokens: { accessToken, refreshToken } } });
     }
 
     /**
@@ -123,8 +121,8 @@ class AuthService {
             throw new NotFoundException('Email not registered, please sign up first');
         }
 
-        const credentials = await generateCredentialsToken(user);
-        return res.json({ message: "Login successful", tokens: { credentials } });
+        const { accessToken, refreshToken } = await generateCredentialsToken(user);
+        return SuccessResponse<ILogin>({ res, message: "Login successful", data: { tokens: { accessToken, refreshToken } } });
     }
 
     /**
@@ -149,7 +147,7 @@ class AuthService {
             throw new BadRequestException('OTP has expired, please request a new one');
         }
         await this.userModel.updateOne({ filter: { email }, update: { confirmedAt: new Date().toLocaleString(), $unset: { confirmedEmailOtp: 1, otpExpire: 1 } } });
-        return res.json({ message: 'Email verified successfully' });
+        return SuccessResponse({ res, message: 'Email verified successfully' });
     }
 
     /**
@@ -163,7 +161,7 @@ class AuthService {
      */
     login = async (req: Request, res: Response): Promise<Response> => {
         const { email, password }: ISignInBodyInputsDTO = req.body;
-        const user = await this.userModel.findOne({ filter: { email, provider: providerEnum.system }, select: 'email firstName lastName DOB confirmedAt role password' });
+        const user = await this.userModel.findOne({ filter: { email, provider: providerEnum.system }, select: 'email firstName lastName DOB confirmedAt role password freezeAt' });
 
         if (!user) {
             throw new ConflictException('Invalid email or password');
@@ -171,16 +169,16 @@ class AuthService {
         if (!(await compareData(password, user.password))) {
             throw new ConflictException('Invalid email or password');
         }
+        if (user.freezeAt) {
+            throw new ForbiddenException('Your account is frozen. Please contact support to resolve this issue.');
+        }
         if (!user.confirmedAt) {
             throw new BadRequestException('Please verify your email to login');
         }
 
         const { accessToken, refreshToken } = await generateCredentialsToken(user);
 
-        return res.json({
-            message: 'Login successful',
-            tokens: { accessToken, refreshToken }
-        });
+        return SuccessResponse<ILogin>({ res: res, message: 'Login successful', data: { tokens: { accessToken, refreshToken } } });
     }
 
     /**
@@ -195,10 +193,7 @@ class AuthService {
     refreshToken = async (req: Request, res: Response): Promise<Response> => {
         const { accessToken, refreshToken } = await generateCredentialsToken(req.user!);
         await revokeToken(req.decoded as JwtPayload);
-        return res.json({
-            message: 'Token refreshed successfully',
-            tokens: { accessToken, refreshToken }
-        });
+        return SuccessResponse<ILogin>({ res: res, message: 'Generated new tokens successfully', data: { tokens: { accessToken, refreshToken } } });
     }
 }
 export default new AuthService();

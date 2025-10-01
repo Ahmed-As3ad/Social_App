@@ -1,4 +1,4 @@
-import mongoose, { HydratedDocument, Schema } from "mongoose";
+import mongoose, { HydratedDocument, Schema, Types } from "mongoose";
 
 export enum GenderEnum {
     male = "male",
@@ -22,6 +22,8 @@ export interface IUser {
     confirmedEmailOtp?: string,
     confirmedAt: Date,
     avatar?: string,
+    tempAvatar?: string,
+    covers: string[],
     password: string,
     resetPasswordOtp: string,
     otpExpire: Date,
@@ -33,6 +35,11 @@ export interface IUser {
     gender: GenderEnum,
     role: RoleEnum,
     provider: providerEnum,
+    freezeAt?: Date,
+    freezeReason?: string,
+    freezeBy?: Types.ObjectId,
+    restoredAt?: Date,
+    restoredBy?: Types.ObjectId,
     createdAt: Date,
     updatedAt?: Date
 }
@@ -44,6 +51,8 @@ const userSchema = new Schema<IUser>({
     confirmedEmailOtp: { type: String, trim: true },
     confirmedAt: { type: Date },
     avatar: { type: String, trim: true },
+    tempAvatar: { type: String, trim: true },
+    covers: { type: [String], default: [] },
     password: { type: String, required: function(){ return this.provider === providerEnum.system? true : false }, trim: true },
     resetPasswordOtp: { type: String, trim: true },
     otpExpire: { type: Date },
@@ -54,6 +63,11 @@ const userSchema = new Schema<IUser>({
     gender: { type: String, enum: Object.values(GenderEnum), default: GenderEnum.male },
     role: { type: String, enum: Object.values(RoleEnum), default: RoleEnum.user },
     provider: { type: String, enum: Object.values(providerEnum), default: providerEnum.system },
+    freezeAt: { type: Date },
+    freezeReason: { type: String },
+    freezeBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    restoredAt: { type: Date },
+    restoredBy: { type: Schema.Types.ObjectId, ref: 'User' },
 }, {
     timestamps: true,
     toJSON: { virtuals: true },
