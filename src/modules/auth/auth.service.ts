@@ -3,9 +3,7 @@ import { ISignInBodyInputsDTO, ISignUpBodyInputsDTO, ISignUpGmailDTO, IVerifyOtp
 import UserModel, { providerEnum } from "../../DB/model/User.model.js";
 import { UserRepository } from "../../DB/repository/user.repository.js";
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "../../utils/response/error.response.js";
-import { compareData, hashData } from "../../utils/security/hash.utils.js";
-import { emailEvent } from "../../utils/events/email.event.js";
-import { html } from "../../utils/Email/email.template.js";
+import { compareData } from "../../utils/security/hash.utils.js";
 import { generateOtp } from "../../utils/Email/Otp.js";
 import { generateCredentialsToken, revokeToken } from "../../utils/security/token.security.js";
 import { JwtPayload } from "jsonwebtoken";
@@ -37,13 +35,7 @@ class AuthService {
             throw new ConflictException('Email already in use');
         }
         const otp = generateOtp();
-        const newUser = await this.userModel.createUser({ data: [{ firstName, lastName, email, password: await hashData(password), DOB, confirmedEmailOtp: await hashData(String(otp)), otpExpire: new Date(Date.now() + 3 * 60 * 1000) }] });
-
-        /**
-         * Send welcome email with OTP
-         */
-        const emailData = { to: email, subject: 'Confirm your email✉️', html: html(firstName, otp) };
-        emailEvent.emit('sendEmail', emailData);
+        const newUser = await this.userModel.createUser({ data: [{ firstName, lastName, email, password, DOB, confirmedEmailOtp: String(otp), otpExpire: new Date(Date.now() + 3 * 60 * 1000) }] });
 
         return SuccessResponse({ res, message: 'Registered Successfully', data: { newUser } });
     }

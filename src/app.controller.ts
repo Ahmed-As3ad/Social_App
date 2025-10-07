@@ -10,13 +10,13 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 // import controllers
-import authController from './modules/auth/auth.controller';
+import { authRouter, userRouter, postRouter} from './modules';
 import { BadRequestException, handleError } from './utils/response/error.response';
 import connectDb from './DB/connect.db.js';
-import userController from './modules/user/user.controller';
 import { AWS_GetFileStream } from './utils/multer/s3.config.js';
 import { promisify } from 'node:util'
 import { pipeline } from 'node:stream';
+
 const pipe = promisify(pipeline);
 // initialize rate limiter
 const limiter = rateLimit({
@@ -58,8 +58,9 @@ const bootstrap = async (): Promise<void> => {
     });
 
     // routes
-    app.use('/api/auth', authController);
-    app.use('/api/user', userController);
+    app.use('/api/auth', authRouter);
+    app.use('/api/user', userRouter);
+    app.use('/api/post', postRouter);
 
     // handle invalid routes
     app.use('{/*dummy}', (req: Request, res: Response) => {
@@ -69,6 +70,26 @@ const bootstrap = async (): Promise<void> => {
     });
     // global error handler
     app.use(handleError);
+
+    // async function test() {
+    //     // try {
+    //     //     const user = await new UserModel({
+    //     //         fullName: 'John Doe',
+    //     //         email: 'anaahmee48@gmail.com',
+    //     //         password: 'securePassword123',
+    //     //         DOB: '1990-01-01'
+    //     //     }).save();
+    //     //     console.log('User created:', user);
+    //     //     console.log('Full Name:', user.fullName);
+    //     // } catch (error) {
+    //     //     console.error('Error creating user:', error);
+    //     // }
+    //     const userModel = new UserRepository(UserModel);
+    //     const user = await userModel.findAndUpdate({ filter: { _id: "68d1d6e14f3217d0c2cd7957" as unknown as Types.ObjectId }, update: { freezeAt: new Date() } });
+    //     console.log({ result: user });
+
+    // }
+    // // test();
 
     app.listen(port, () => {
         console.log(`app is running at http://localhost:${port}🎉`);

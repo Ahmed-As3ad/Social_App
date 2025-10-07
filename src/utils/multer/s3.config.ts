@@ -48,7 +48,7 @@ export const AWS_uploadLargeFile = async ({ Bucket = process.env.AWS_BUCKET_NAME
 }
 
 // for multiple files
-export const AWS_UploadFiles = async ({ Bucket = process.env.AWS_BUCKET_NAME as string, ACL = "private", path = "general", files, storageType = storageTypeEnum.disk, useLargeFiles = false }: { Bucket?: string, ACL?: ObjectCannedACL, path?: string, files: Express.Multer.File[], storageType?: storageTypeEnum, useLargeFiles?: boolean }) => {
+export const AWS_UploadFiles = async ({ Bucket = process.env.AWS_BUCKET_NAME as string, ACL = "private", path = "general", files, storageType = storageTypeEnum.memory, useLargeFiles = false }: { Bucket?: string, ACL?: ObjectCannedACL, path?: string, files: Express.Multer.File[], storageType?: storageTypeEnum, useLargeFiles?: boolean }) => {
     let urls: string[] = [];
     if (useLargeFiles) {
         urls = await Promise.all(files.map(file => AWS_uploadLargeFile({ Bucket, ACL, path, file, storageType }))) as unknown as string[];

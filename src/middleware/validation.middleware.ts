@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express"
 import type { ZodError, ZodType } from "zod"
 import { z } from "zod"
 import { BadRequestException } from "../utils/response/error.response.js"
+import { Types } from "mongoose";
 
 // types
 type keyReqType = keyof Request; // 'body' | 'query' | 'params' 
@@ -9,7 +10,7 @@ type SchemaType = Partial<Record<keyReqType, ZodType>>
 type ValidationErrorType = Array<{
     key: keyReqType,
     errors: Array<{
-        path: string | number | symbol | undefined,
+        path: (string | number | symbol | undefined)[],
         message: string
     }>
 }>
@@ -19,12 +20,20 @@ export const validation = (schema: SchemaType) => {
         const validationErrors: ValidationErrorType = [];
         for (const key of Object.keys(schema) as keyReqType[]) {
             if (!key) continue;
+            if (req.file) {
+                req.body.attachments = req.file;
+            }
+            if (req.files) {
+                console.log('req.files', req.files);
+
+                req.body.attachments = req.files;
+            }
             const validationResult = schema[key]?.safeParse(req[key]);
             if (validationResult && !validationResult.success) {
                 const errors = validationResult.error as ZodError;
                 validationErrors.push({
                     key,
-                    errors: errors.issues.map(issue => ({ path: issue.path[0], message: issue.message }))
+                    errors: errors.issues.map(issue => ({ path: issue.path, message: issue.message }))
                 })
             }
         }
@@ -44,5 +53,22 @@ export const generalFieldValidator = {
     lastName: z.string().min(3, 'last name must be at least 3 characters long').max(30, 'last name must be at most 30 characters long'),
     email: z.string().email('invalid email format'),
     password: z.string().min(6, 'password must be at least 6 characters long').max(100, 'password must be at most 100 characters long'),
-    otp: z.string().regex(/^\d{6}$/, 'OTP must be a 6-digit number')
+    otp: z.string().regex(/^\d{6}$/, 'OTP must be a 6-digit number'),
+    file: function (mimeType: string[]) {
+        return z.strictObject({
+            fieldname: z.string().min(1),
+            originalname: z.string().min(1),
+            encoding: z.string().min(1),
+            mimetype: z.enum(mimeType, 'file type is not allowed'),
+            buffer: z.instanceof(Buffer).optional(),
+            path: z.string().min(1).optional(),
+            destination: z.string().min(1).optional(),
+            filename: z.string().min(1).optional(),
+            size: z.number().min(0)
+        }).refine(data => {
+            return data.path || data.buffer
+        }, { error: 'file must have at least path or buffer' })
+    },
+    idsList: z.array(z.string().refine(data => { return Types.ObjectId.isValid(data), { message: 'Invalid tag user ID Format.' } })).max(10, 'Tags can have a maximum length of 10 characters').optional(),
+    id: z.string().refine(data => { return Types.ObjectId.isValid(data), { message: 'Invalid tag user ID Format.' } })
 }

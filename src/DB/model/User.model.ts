@@ -1,4 +1,7 @@
 import mongoose, { HydratedDocument, Schema, Types } from "mongoose";
+import { emailEvent } from "../../utils/events/email.event.js";
+import { html } from "../../utils/Email/email.template.js";
+import { hashData } from "../../utils/security/hash.utils.js";
 
 export enum GenderEnum {
     male = "male",
@@ -7,9 +10,10 @@ export enum GenderEnum {
 
 export enum RoleEnum {
     user = "user",
-    admin = "admin"
+    admin = "admin",
+    superAdmin = "superAdmin"
 }
-export enum providerEnum{
+export enum providerEnum {
     google = "google",
     system = "system"
 }
@@ -53,11 +57,11 @@ const userSchema = new Schema<IUser>({
     avatar: { type: String, trim: true },
     tempAvatar: { type: String, trim: true },
     covers: { type: [String], default: [] },
-    password: { type: String, required: function(){ return this.provider === providerEnum.system? true : false }, trim: true },
+    password: { type: String, required: function () { return this.provider === providerEnum.system ? true : false }, trim: true },
     resetPasswordOtp: { type: String, trim: true },
     otpExpire: { type: Date },
     changeCredentialsTime: { type: Date },
-    DOB: { type: String, required: function(){ return this.provider === providerEnum.system? true : false }, trim: true },
+    DOB: { type: String, required: function () { return this.provider === providerEnum.system ? true : false }, trim: true },
     phone: { type: String, trim: true },
     address: { type: String, trim: true },
     gender: { type: String, enum: Object.values(GenderEnum), default: GenderEnum.male },
@@ -71,7 +75,8 @@ const userSchema = new Schema<IUser>({
 }, {
     timestamps: true,
     toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
+    strictQuery: true
 })
 
 userSchema.virtual('fullName').set(function (value: string) {
@@ -93,6 +98,10 @@ userSchema.virtual('fullName').set(function (value: string) {
     return `${this.firstName} ${this.lastName}`.trim();
 });
 
+userSchema.virtual('formattedJoinDate').get(function () {
+    return new Date(this.createdAt).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+})
+
 userSchema.virtual('age').get(function () {
     const birthDate = new Date(this.DOB);
     const today = new Date();
@@ -108,6 +117,37 @@ userSchema.virtual('age').get(function () {
     return age;
 })
 
-const UserModel = mongoose.models.User || mongoose.model<IUser>('User', userSchema);
 export type HUserDocument = HydratedDocument<IUser>;
+
+userSchema.pre('save', async function (this: HUserDocument & { wasNew: boolean, confirmEmailPlainOtp: string }, next) {
+    this.wasNew = this.isNew
+    if (this.isModified('password')) {
+        this.password = await hashData(this.password);
+    }
+    if (this.confirmedEmailOtp) {
+        this.confirmEmailPlainOtp = this.confirmedEmailOtp;
+        this.confirmedEmailOtp = await hashData(this.confirmedEmailOtp);
+    }
+    next();
+});
+userSchema.post('save', function (doc, next) {
+    const that = this as HUserDocument & { wasNew: boolean, confirmEmailPlainOtp?: string };
+    if (that.wasNew) {
+        emailEvent.emit('sendEmail', { to: that.email, subject: 'Confirm your email✉️', html: html(that.firstName, Number(that.confirmEmailPlainOtp)) });
+    }
+    console.log('User has been saved:', doc);
+    next();
+})
+
+userSchema.pre(['findOne', 'find'], function (next) {
+    const query = this.getQuery();
+    if (query.paranoid === false) {
+        this.setQuery({ ...query })
+    } else {
+        this.setQuery({ ...query, freezeAt: { $exists: false } })
+    }
+    next();
+})
+
+const UserModel = mongoose.models.User || mongoose.model<IUser>('User', userSchema);
 export default UserModel;

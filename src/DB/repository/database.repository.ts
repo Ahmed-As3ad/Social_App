@@ -17,6 +17,23 @@ export abstract class DataRepository<TDocument> {
         return doc.exec();
     }
 
+    async find({ filter, select, options }: { filter?: RootFilterQuery<TDocument>, select?: ProjectionType<TDocument>, options?: QueryOptions<TDocument> }): Promise<(Lean<TDocument> | HydratedDocument<TDocument>)[]> {
+        const docs = this.model.find(filter || {}).select(select || "");
+        if (options?.lean) {
+            docs.lean(options?.lean);
+        }
+        if (options?.skip) {
+            docs.skip(options?.skip);
+        }
+        if (options?.limit) {
+            docs.limit(options?.limit);
+        }
+        if (options?.populate) {
+            docs.populate(options?.populate as PopulateOptions[]);
+        }
+        return docs.exec();
+    }
+
     async updateOne({ filter, update, options }: { filter?: RootFilterQuery<TDocument>, update?: UpdateQuery<TDocument>, options?: MongooseUpdateQueryOptions<TDocument> | null }): Promise<QueryWithHelpers<UpdateWriteOpResult, TDocument>> {
         return this.model.updateOne(
             filter || {},
@@ -33,7 +50,7 @@ export abstract class DataRepository<TDocument> {
         ).exec();
     }
 
-    async findAndUpdate({ filter, update, options }: { filter?: RootFilterQuery<TDocument>, update?: UpdateQuery<TDocument>, options?: MongooseUpdateQueryOptions<TDocument> | null }): Promise<Lean<TDocument> | HydratedDocument<TDocument> | null> {
+    async findOneAndUpdate({ filter, update, options }: { filter?: RootFilterQuery<TDocument>, update?: UpdateQuery<TDocument>, options?: MongooseUpdateQueryOptions<TDocument> | null }): Promise<Lean<TDocument> | HydratedDocument<TDocument> | null> {
         return this.model.findOneAndUpdate(
             filter || {},
             { ...update, $inc: { __v: 1 } },
@@ -43,6 +60,10 @@ export abstract class DataRepository<TDocument> {
 
     async deleteOne({ filter }: { filter?: RootFilterQuery<TDocument> }): Promise<{ deletedCount?: number }> {
         return this.model.deleteOne(filter).exec();
+    }
+
+    async deleteMany({ filter }: { filter?: RootFilterQuery<TDocument> }): Promise<{ deletedCount?: number }> {
+        return this.model.deleteMany(filter).exec();
     }
 
     async create({ data, options }: { data: Partial<TDocument>[], options?: CreateOptions }): Promise<HydratedDocument<TDocument>[] | undefined> {
