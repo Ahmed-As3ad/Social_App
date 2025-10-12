@@ -51,9 +51,16 @@ const postSchema = new Schema<IPost>({
     freezedAt: { type: Date },
     restoredAt: { type: Date },
     restoredBy: { type: Schema.Types.ObjectId, ref: "User" },
-}, { timestamps: true, strictQuery: true });
+}, { timestamps: true, strictQuery: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
-postSchema.pre(['find', 'findOne', 'findOneAndUpdate', 'updateOne'], function (next) {
+postSchema.virtual('comments',{
+    localField: '_id',
+    foreignField: 'postId',
+    ref: 'Comment',
+    justOne: true
+})
+
+postSchema.pre(['find', 'findOne', 'findOneAndUpdate', 'updateOne', 'countDocuments'], function (next) {
     const query = this.getQuery();
     if (query.paranoid === false) {
         this.setQuery({ ...query })

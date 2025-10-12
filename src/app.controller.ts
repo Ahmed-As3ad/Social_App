@@ -50,6 +50,7 @@ const bootstrap = async (): Promise<void> => {
         if (!fileStream || !fileStream.Body) {
             new BadRequestException('file not found');
         }
+        res.set('Cross-Origin-Resource-Policy', 'cross-origin');
         res.setHeader('Content-Type', fileStream.ContentType || 'application/octet-stream');
         if (download === 'true') {
             res.setHeader('Content-Disposition', `attachment; filename="${downloadName || Key.split('/').pop()}"`);

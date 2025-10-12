@@ -2,6 +2,7 @@ import z from "zod";
 import { LogoutEnum } from "../../utils/security/token.security.js";
 import { generalFieldValidator } from "../../middleware/validation.middleware.js";
 import { Types } from "mongoose";
+import { RoleEnum } from "../../DB/model/User.model.js";
 
 export const logoutValidate = {
     body: z.strictObject({
@@ -50,5 +51,34 @@ export const DeleteAccountValidate = {
         userId: z.string().optional().refine((id) => {
             return id ? Types.ObjectId.isValid(id) : true
         }, { error: "invalid user id", path: ["userId"] })
+    })
+}
+
+export const changeRoleValidate = {
+    params: z.strictObject({
+        userId: generalFieldValidator.id
+    }),
+    body: z.strictObject({
+        role: z.enum(RoleEnum)
+    })
+}
+
+export const sendFriendRequestValidate = {
+    params: z.strictObject({
+        toUserId: generalFieldValidator.id
+    })
+}
+
+export const acceptRequestValidate = {
+    params: z.strictObject({
+        requestId: generalFieldValidator.id
+    })
+}
+export const rejectRequestValidate = {
+    params: acceptRequestValidate.params.extend({})
+}
+export const removeFriendValidate = {
+    params: z.strictObject({
+        friendId: generalFieldValidator.id
     })
 }

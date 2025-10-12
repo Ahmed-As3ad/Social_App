@@ -1,0 +1,1 @@
+export { postAvailability } from "./post.service";

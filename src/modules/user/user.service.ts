@@ -3,7 +3,7 @@ import { DeleteAccountDTO, FreezeAccountBodyDTO, FreezeAccountParamsDTO, logoutD
 import { LogoutEnum, revokeToken } from "../../utils/security/token.security.js";
 import { UserRepository } from "../../DB/repository/user.repository.js";
 import UserModel, { IUser, providerEnum, RoleEnum } from "../../DB/model/User.model.js";
-import { UpdateQuery } from "mongoose";
+import { Types, UpdateQuery } from "mongoose";
 import { JwtPayload } from "jsonwebtoken";
 import { BadRequestException, ForbiddenException, NotFoundException } from "../../utils/response/error.response.js";
 import { generateOtp } from "../../utils/Email/Otp.js";
@@ -14,10 +14,16 @@ import { AWS_DeleteFiles, AWS_PreSignedUrl, AWS_ReadFiles, AWS_UploadFiles } fro
 import { AWSEvent } from "../../utils/events/s3events.js";
 import { SuccessResponse } from "../../utils/response/success.response.js";
 import { IgetPreSignedUrl, IUserSuccess } from "./user.entities.js";
+import PostModel from "../../DB/model/Post.model.js";
+import { PostRepository } from "../../DB/repository/post.repository.js";
+import { FriendRequestRepository } from "../../DB/repository/friendRequest.repository.js";
+import FriendRequestModel from "../../DB/model/FriendRequest.model.js";
 
 
 class userService {
     private userModel = new UserRepository(UserModel);
+    private postModel = new PostRepository(PostModel);
+    private friendRequestModel = new FriendRequestRepository(FriendRequestModel);
 
     constructor() { }
     profile = async (req: Request, res: Response): Promise<Response> => {
@@ -163,7 +169,7 @@ class userService {
             throw new BadRequestException('originalname and contentType are required');
         }
 
-        const {url} = await AWS_PreSignedUrl({
+        const { url } = await AWS_PreSignedUrl({
             Bucket: process.env.AWS_BUCKET_NAME as string,
             originalname,
             contentType,
@@ -187,7 +193,7 @@ class userService {
         if (userId && req.user?.role !== RoleEnum.admin) {
             throw new ForbiddenException('Only admins can freeze other accounts');
         }
-        const user = await this.userModel.findAndUpdate({ filter: { _id: userId || req.user?._id, freezeAt: { $exists: false } }, update: { freezeAt: new Date(), freezeBy: req.user?._id, freezeReason: reason, changeCredentialsTime: new Date(), $unset: { restoredAt: 1, restoredBy: 1 } } });
+        const user = await this.userModel.findOneAndUpdate({ filter: { _id: userId || req.user?._id, freezeAt: { $exists: false } }, update: { freezeAt: new Date(), freezeBy: req.user?._id, freezeReason: reason, changeCredentialsTime: new Date(), $unset: { restoredAt: 1, restoredBy: 1 } } });
         if (!user) {
             throw new NotFoundException('User not found or account is already frozen');
         }
@@ -208,7 +214,7 @@ class userService {
         if (userId && req.user?.role !== RoleEnum.admin) {
             throw new ForbiddenException('Only admins can unfreeze other accounts');
         }
-        const user = await this.userModel.findAndUpdate({ filter: { _id: userId, freezeAt: { $exists: true }, freezeBy: { $ne: userId } }, update: { $unset: { freezeAt: 1, freezeBy: 1, freezeReason: 1 }, restoredAt: new Date(), restoredBy: req.user?._id, changeCredentialsTime: new Date() } });
+        const user = await this.userModel.findOneAndUpdate({ filter: { _id: userId, freezeAt: { $exists: true }, freezeBy: { $ne: userId } }, update: { $unset: { freezeAt: 1, freezeBy: 1, freezeReason: 1 }, restoredAt: new Date(), restoredBy: req.user?._id, changeCredentialsTime: new Date() } });
         if (!user) {
             throw new NotFoundException('User not found or account is not frozen or you are trying to unfreeze account frozen by Owner');
         }
@@ -254,6 +260,117 @@ class userService {
         }
         return SuccessResponse({ res, message: "Account deleted successfully" });
     }
+
+    dashboard = async (req: Request, res: Response): Promise<Response> => {
+        const result = await Promise.allSettled([
+            this.userModel.find({ filter: {} }),
+            this.postModel.find({ filter: {} }),
+        ])
+        return SuccessResponse({ res, message: "dashboard data", data: { users: result[0], posts: result[1] } });
+    }
+
+    changeRole = async (req: Request, res: Response): Promise<Response> => {
+        const { userId } = req.params as unknown as { userId: Types.ObjectId };
+        const { role }: { role: RoleEnum } = req.body;
+        let denyRoles: RoleEnum[] = [role, RoleEnum.superAdmin]
+        if (req.user?.role === RoleEnum.admin) {
+            denyRoles.push(RoleEnum.admin)
+        }
+        if (req.user?.role === RoleEnum.admin && role === RoleEnum.superAdmin) {
+            throw new ForbiddenException('Admins cannot assign superAdmin role');
+        }
+        const user = await this.userModel.findOneAndUpdate({
+            filter: { _id: userId as Types.ObjectId, role: { $nin: denyRoles } },
+            update: { role }
+        })
+        if (!user) {
+            throw new NotFoundException('User not found or you are not allowed to change this role');
+        }
+        return SuccessResponse({ res, message: "Role changed successfully" });
+    }
+    sendFriendRequest = async (req: Request, res: Response): Promise<Response> => {
+        const { toUserId } = req.params as unknown as { toUserId: Types.ObjectId };
+        const senderId = req.user?._id as Types.ObjectId;
+        if(senderId.equals(toUserId)) {
+            throw new BadRequestException('Cannot send friend request to yourself');
+        }
+        const existingRequest = await this.friendRequestModel.findOne({
+            filter: {
+                $or: [
+                    { sender: senderId, receiver: toUserId, status: 'pending' },
+                    { sender: toUserId, receiver: senderId, status: 'pending' }
+                ]
+            }
+        });
+        if (existingRequest) {
+            throw new BadRequestException('Friend request already sent and pending');
+        }
+        const user = await this.userModel.findOne({ filter: { _id: toUserId, $ne: req.user?._id } });
+        if (!user) {
+            throw new NotFoundException('User not found or cannot send friend request to yourself');
+        }
+        const friendRequest = await this.friendRequestModel.create({
+            data: [
+                {
+                    sender: req.user?._id as Types.ObjectId,
+                    receiver: toUserId,
+                }
+            ]
+        });
+        if (!friendRequest || friendRequest.length === 0) {
+            throw new BadRequestException('Failed to send friend request, try again later');
+        }
+        return SuccessResponse({ res, status: 201, message: 'Friend request sent successfully' });
+    }
+
+    acceptRequest = async (req: Request, res: Response): Promise<Response> => {
+        const { requestId } = req.params as unknown as { requestId: Types.ObjectId };
+        const friendRequest = await this.friendRequestModel.findOneAndUpdate({
+            filter: { _id: requestId, receiver: req.user?._id, status: 'pending', acceptedAt: { $exists: false } },
+            update: { status: 'accepted', AcceptedAt: new Date() }
+        });
+        if (!friendRequest) {
+            throw new NotFoundException('Friend request not found or already responded to');
+        }
+        const acceptFriend = await Promise.all([
+            this.userModel.updateOne({ filter: { _id: friendRequest.sender }, update: { $addToSet: { friends: friendRequest.receiver } } }),
+            this.userModel.updateOne({ filter: { _id: friendRequest.receiver }, update: { $addToSet: { friends: friendRequest.sender } } })
+        ])
+        if (!acceptFriend) {
+            throw new BadRequestException('Failed to add friend, try again later');
+        }
+        return SuccessResponse({ res, message: 'Friend request accepted successfully' });
+    }
+
+    rejectRequest = async (req: Request, res: Response): Promise<Response> => {
+        const { requestId } = req.params as unknown as { requestId: Types.ObjectId };
+        const friendRequest = await this.friendRequestModel.findOneAndDelete({
+            filter: { _id: requestId, receiver: req.user?._id, status: 'pending', acceptedAt: { $exists: false } }
+        });
+        if (!friendRequest) {
+            throw new NotFoundException('Friend request not found or already responded to');
+        }
+        return SuccessResponse({ res, message: 'Friend request rejected successfully' });
+    }
+
+    removeFriend = async (req: Request, res: Response): Promise<Response> => {
+        const { friendId } = req.params as unknown as { friendId: Types.ObjectId };
+        const user = await this.userModel.findOne({ filter: { _id: friendId, friends: { $in: [req.user?._id] } } });
+        if (!user) {
+            throw new NotFoundException('Friend not found in your friends list');
+        }
+        const removeFriend = await Promise.all([
+            this.userModel.updateOne({ filter: { _id: req.user?._id }, update: { $pull: { friends: friendId } } }),
+            this.userModel.updateOne({ filter: { _id: friendId }, update: { $pull: { friends: req.user?._id } } })
+        ])
+        if (!removeFriend) {
+            throw new BadRequestException('Failed to remove friend, try again later');
+        }
+        await this.friendRequestModel.deleteOne({filter:{$or: [{sender: req.user?._id, receiver: friendId}, {sender: friendId, receiver: req.user?._id}]}});
+        return SuccessResponse({ res, message: 'Friend removed successfully' });
+    }
 }
+
+
 
 export default new userService();

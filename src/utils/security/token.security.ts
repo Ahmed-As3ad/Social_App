@@ -33,6 +33,7 @@ export const detectCredentialTokenType = (role: RoleEnum): TokenTypeEnum => {
     let detected = TokenTypeEnum.Bearer
     switch (role) {
         case RoleEnum.admin:
+        case RoleEnum.superAdmin:
             detected = TokenTypeEnum.Admin
             break;
         default:

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { PostRepository } from "../../DB/repository/post.repository.js";
-import PostModel, { HPostDocument, likeActionEnum } from "../../DB/model/Post.model.js";
+import PostModel, { AvalilabilityEnum, HPostDocument, likeActionEnum } from "../../DB/model/Post.model.js";
 import { SuccessResponse } from "../../utils/response/success.response.js";
 import { UserRepository } from "../../DB/repository/user.repository.js";
 import UserModel from "../../DB/model/User.model.js";
@@ -8,8 +8,21 @@ import { BadRequestException, NotFoundException } from "../../utils/response/err
 import { AWS_DeleteFiles, AWS_UploadFiles } from "../../utils/multer/s3.config.js";
 import { v4 as uuid } from 'uuid'
 import { likePostDTO } from "./post.DTO.js";
-import { UpdateQuery } from "mongoose";
+import { Types, UpdateQuery } from "mongoose";
 
+
+export const postAvailability = (req: Request) => {
+    const userId = req.user?._id;
+    const userFriends = req.user?.friends || [];
+
+    return [
+        { availability: AvalilabilityEnum.public },
+        ...(userId ? [{ availability: AvalilabilityEnum.friends, author: { $in: [...userFriends, userId] } }] : []),
+        ...(userId ? [{ availability: AvalilabilityEnum.private, author: userId }] : []),
+        ...(userId ? [{ availability: AvalilabilityEnum.specificFriends, specificFriends: { $in: [userId] } }] : []),
+        ...(userId ? [{ availability: { $ne: AvalilabilityEnum.private }, tags: { $in: [userId] } }] : [])
+    ].filter(Boolean)
+}
 
 class PostService {
     private userModel = new UserRepository(UserModel);
@@ -25,7 +38,7 @@ class PostService {
      * @returns - SuccessResponse with post creation message and status 201 or error if post creation fails.
     */
     createPost = async (req: Request, res: Response): Promise<Response> => {
-        if (req?.body?.tags?.length && ((await this.userModel.find({ filter: { _id: { $in: req.body.tags } } })).length !== req.body.tags.length)) {
+        if (req?.body?.tags?.length && ((await this.userModel.find({ filter: { _id: { $in: req.body.tags, $ne: req?.user?._id } } })).length !== req.body.tags.length)) {
             throw new NotFoundException('One or more tag users not found');
         }
         let attachments: string[] = [];
@@ -41,6 +54,58 @@ class PostService {
             throw new BadRequestException('Post not created, try again later');
         }
         return SuccessResponse({ res, status: 201, message: 'Post Created' })
+    }
+
+    updatePost = async (req: Request, res: Response): Promise<Response> => {
+        const { postId } = req.params as unknown as { postId: Types.ObjectId };
+        const post = await this.postModel.findOne({ filter: { _id: postId, author: req.user?._id } });
+        if (!post) throw new NotFoundException('Post not found');
+        if (req?.body?.tags?.length && ((await this.userModel.find({ filter: { _id: { $in: req.body.tags, $ne: req?.user?._id } } })).length !== req.body.tags.length)) {
+            throw new NotFoundException('One or more tag users not found');
+        }
+        let attachments: string[] = [];
+        if (req.files?.length) {
+            attachments = await AWS_UploadFiles({ files: req.files as Express.Multer.File[], path: `users/${post.author}/post/${post.assetsFolderId}` })
+        }
+        const updatedPost = await this.postModel.updateOne({
+            filter: { _id: postId, author: req.user?._id },
+            update: [{
+                $set: {
+                    content: req.body.content,
+                    availability: req.body.availability,
+                    allowComment: req.body.allowComment,
+                    attachments: {
+                        $setUnion: [
+                            { $setDifference: ["$attachments", req.body.removedAttachments || []] },
+                            attachments
+                        ]
+                    },
+                    tags: {
+                        $setUnion: [
+                            { $setDifference: ["$tags", (req.body.removedTags || []).map((tag: string) => { return Types.ObjectId.createFromHexString(tag); })] },
+                            (req.body.tags || []).map((tag: string) => { return Types.ObjectId.createFromHexString(tag) })
+                        ]
+                    },
+                    specificFriends: {
+                        $setUnion: [
+                            { $setDifference: ["$specificFriends", (req.body.removedSpecificFriends || []).map((friend: string) => { return Types.ObjectId.createFromHexString(friend); })] },
+                            (req.body.specificFriends || []).map((friend: string) => { return Types.ObjectId.createFromHexString(friend) })
+                        ]
+                    }
+                }
+            }]
+        });
+        if (!updatedPost) {
+            if (attachments.length) {
+                await AWS_DeleteFiles({ urls: attachments });
+            }
+            throw new BadRequestException('Post not updated, try again later');
+        } else {
+            if (req.body.removedAttachments?.length) {
+                await AWS_DeleteFiles({ urls: req.body.removedAttachments });
+            }
+        }
+        return SuccessResponse({ res, status: 201, message: 'Post updated' })
     }
 
     /**
@@ -60,10 +125,35 @@ class PostService {
             update = { $pull: { likes: req.user?._id } }
             messageL = 'Post unliked';
         }
-        const post = await this.postModel.findOneAndUpdate({ filter: { _id: postId }, update });
+        const post = await this.postModel.findOneAndUpdate({
+            filter: {
+                _id: postId,
+                $or: postAvailability(req)
+            }, update
+        });
         if (!post) throw new NotFoundException('Post not found or Post Frozen');
         return SuccessResponse({ res, status: 200, message: messageL === 'Post liked' ? messageL : 'Post unliked' });
     };
+
+    getPosts = async (req: Request, res: Response): Promise<Response> => {
+        let { page, size } = req.query as unknown as { page?: number, size?: number };
+        const posts = await this.postModel.pagination({
+            filter: { $or: postAvailability(req) },
+            options: { populate: [{ path: 'comments', match: { commentId: { $exists: false }, freezedAt: { $exists: false } }, populate: [{ path: 'replies', match: { freezedAt: { $exists: false } } }] }]  },
+            page: page!,
+            size: size!,
+        })
+        // let results = []
+        // for (const post of posts.result) {
+        //     const comments = await this.commentModel.find({ filter: { postId: post._id } })
+        //     results.push({ post, comments })
+        // }
+        // posts.result = results
+        // const posts = await this.postModel.findCursor({ filter: { $or: postAvailability(req) } })
+        // console.log(`posts: ${posts}`);
+
+        return SuccessResponse({ res, status: 200, message: 'Posts fetched', data: { posts } });
+    }
 }
 
-export default new PostService();
+export const postService = new PostService();

@@ -38,6 +38,7 @@ export interface IUser {
     address?: string,
     gender: GenderEnum,
     role: RoleEnum,
+    friends?: Types.ObjectId[];
     provider: providerEnum,
     freezeAt?: Date,
     freezeReason?: string,
@@ -66,6 +67,7 @@ const userSchema = new Schema<IUser>({
     address: { type: String, trim: true },
     gender: { type: String, enum: Object.values(GenderEnum), default: GenderEnum.male },
     role: { type: String, enum: Object.values(RoleEnum), default: RoleEnum.user },
+    friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
     provider: { type: String, enum: Object.values(providerEnum), default: providerEnum.system },
     freezeAt: { type: Date },
     freezeReason: { type: String },
