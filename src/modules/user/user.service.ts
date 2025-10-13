@@ -26,12 +26,36 @@ class userService {
     private friendRequestModel = new FriendRequestRepository(FriendRequestModel);
 
     constructor() { }
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles user profile retrieval
+     * @example (req: Request, res: Response)
+     * return {message: 'user profile', statusCode: 200, data: {user: req.user}}
+     * @returns - Promise<Response>
+     * @throws {BadRequestException} - If user is not authenticated
+     * @example (req: Request, res: Response): Promise<Response>
+     */
     profile = async (req: Request, res: Response): Promise<Response> => {
         if (!req.user) {
             throw new BadRequestException('User not authenticated');
         }
         return SuccessResponse<IUserSuccess>({ res, message: "user profile", data: { user: req.user } });
     }
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles user profile retrieval by userId
+     * @example (req: Request, res: Response)
+     * return {message: 'user profile', statusCode: 200, data: {user: user}}
+     * @returns - Promise<Response>
+     * @throws {NotFoundException} - If user is not found or blocked by the requester
+     * @example (req: Request, res: Response): Promise<Response>
+     */
     getProfile = async (req: Request, res: Response): Promise<Response> => {
         const { userId } = req.params as unknown as { userId?: Types.ObjectId };
         const user = await this.userModel.findOne({ filter: { _id: userId, blockedUsers: { $ne: req.user?._id } },select: '-password -resetPasswordOtp -otpExpire -changeCredentialsTime -confirmedEmailOtp -confirmedAt -provider -updatedAt -__v' });
@@ -48,6 +72,10 @@ class userService {
      * @description - This function handles user logout
      * @example ({ flag }: logoutDTO)
      * return {message: 'success Logout', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {BadRequestException} - If user is not authenticated
+     * @throws {ForbiddenException} - If the user is not an admin and tries to logout all users
+     * @example ({ flag }: logoutDTO): Promise<Response>
      */
     logout = async (req: Request, res: Response): Promise<Response> => {
         const { flag }: logoutDTO = req.body;
@@ -79,6 +107,10 @@ class userService {
      * @description - This function handles reset password code sending
      * @example ({ email }: resetPasswordCodeDTO)
      * return {message: 'Reset password code sent successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {NotFoundException} - If user is not found or email is not verified
+     * @throws {BadRequestException} - If the reset password code sending fails
+     * @example ({ email }: resetPasswordCodeDTO): Promise<Response>
      */
     resetPasswordCode = async (req: Request, res: Response): Promise<Response> => {
         const { email }: resetPasswordCodeDTO = req.body;
@@ -100,6 +132,11 @@ class userService {
      * @description - This function handles reset password verification
      * @example ({ email, otp, newPassword }: resetPasswordDTO)
      * return {message: 'Password reset successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {NotFoundException} - If user is not found or email is not verified
+     * @throws {NotFoundException} - If OTP is invalid or expired
+     * @throws {BadRequestException} - If password reset fails
+     * @example ({ email, otp, newPassword }: resetPasswordDTO): Promise<Response>
      */
     resetPasswordVerify = async (req: Request, res: Response): Promise<Response> => {
         const { email, otp, newPassword }: resetPasswordDTO = req.body;
@@ -116,7 +153,19 @@ class userService {
         await this.userModel.updateOne({ filter: { _id: user._id }, update: { password: await hashData(newPassword), $unset: { resetPasswordOtp: 1, otpExpire: 1 }, changeCredentialsTime: new Date() } });
         return SuccessResponse({ res, message: "Password reset successfully" });
     }
-
+    /**
+     * 
+     * @param req - Express Request
+     * @param res - Express Response
+     * @returns - Promise<Response>
+     * @description - This function handles upload user avatar
+     * @example (req: Request, res: Response)
+     * return {message: 'Avatar uploaded successfully', statusCode: 200, data: {url: avatarUrl}}
+     * @returns - Promise<Response>
+     * @throws {BadRequestException} - If file is not found
+     * @throws {BadRequestException} - If the avatar upload fails
+     * @example (req: Request, res: Response): Promise<Response>
+     */
     uploadAvatar = async (req: Request, res: Response): Promise<Response> => {
         // if (!req.file) {
         //     throw new BadRequestException('File not found');
@@ -148,6 +197,10 @@ class userService {
      * @description - This function handles upload multiple cover images
      * @example (req: Request, res: Response)
      * return {message: 'Covers uploaded successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {BadRequestException} - If files are not found or empty
+     * @throws {BadRequestException} - If the cover image upload fails
+     * @example (req: Request, res: Response): Promise<Response>
      */
     uploadCovers = async (req: Request, res: Response): Promise<Response> => {
         if (!req.files || req.files.length === 0) {
@@ -170,6 +223,10 @@ class userService {
      * @description - This function handles generate pre-signed URL for uploading files
      * @example ({ originalname, contentType }: { originalname: string, contentType: string })
      * return {message: 'Pre-signed URL generated successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {BadRequestException} - If originalname or contentType is not provided
+     * @throws {BadRequestException} - If the pre-signed URL generation fails
+     * @example ({ originalname, contentType }: { originalname: string, contentType: string }): Promise<Response>
      */
     getPreSignedUrl = async (req: Request, res: Response): Promise<Response> => {
         const { originalname, contentType } = req.body;
@@ -194,6 +251,10 @@ class userService {
      * @description - This function handles freeze user account
      * @example ({ userId }: FreezeAccountParamsDTO, { reason }: FreezeAccountBodyDTO)
      * return {message: 'Account frozen successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {ForbiddenException} - If the user is not an admin and tries to freeze another user's account
+     * @throws {NotFoundException} - If the user is not found or account is already frozen
+     * @throws {BadRequestException} - If the freeze operation fails
      */
     FreezeAccount = async (req: Request, res: Response): Promise<Response> => {
         const { userId } = req.params as FreezeAccountParamsDTO || {};
@@ -216,6 +277,10 @@ class userService {
      * @description - This function handles unfreeze user account
      * @example ({ userId }: UnFreezeAccountDTO)
      * return {message: 'Account unfrozen successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {ForbiddenException} - If the user is not an admin and tries to unfreeze another user's account
+     * @throws {NotFoundException} - If the user is not found or account is not frozen or you are trying to unfreeze account frozen by Owner
+     * @throws {BadRequestException} - If the unfreeze operation fails
      */
     UnFreezeAccount = async (req: Request, res: Response): Promise<Response> => {
         const { userId } = req.params as UnFreezeAccountDTO;
@@ -238,6 +303,11 @@ class userService {
      * @description - This function handles hard delete user account
      * @example ({ userId }: DeleteAccountDTO)
      * return {message: 'Account deleted successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {ForbiddenException} - If the user is not an admin and tries to delete another user's account
+     * @throws {NotFoundException} - If the user is not found
+     * @throws {BadRequestException} - If the deletion fails
+     * @throws {BadRequestException} - If the AWS folder deletion fails
      */
     deleteHardAccount = async (req: Request, res: Response): Promise<Response> => {
         const { userId } = req.params as DeleteAccountDTO || {};
@@ -268,7 +338,19 @@ class userService {
         }
         return SuccessResponse({ res, message: "Account deleted successfully" });
     }
-
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles dashboard data retrieval
+     * @example (req: Request, res: Response)
+     * return {message: 'dashboard data', statusCode: 200, data: {users: users, posts: posts}}
+     * @returns - Promise<Response>
+     * @throws {BadRequestException} - If the dashboard data retrieval fails
+     * @throws {NotFoundException} - If no users or posts are found
+     * @throws {ForbiddenException} - If the user does not have permission to access the dashboard
+     */
     dashboard = async (req: Request, res: Response): Promise<Response> => {
         const result = await Promise.allSettled([
             this.userModel.find({ filter: {} }),
@@ -276,7 +358,19 @@ class userService {
         ])
         return SuccessResponse({ res, message: "dashboard data", data: { users: result[0], posts: result[1] } });
     }
-
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles changing user role
+     * @example (req: Request, res: Response)
+     * return {message: 'Role changed successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {ForbiddenException} - If an admin tries to assign superAdmin role
+     * @throws {NotFoundException} - If the user is not found or the role change is not allowed
+     * @throws {BadRequestException} - If the role change fails due to invalid role or permissions
+     */
     changeRole = async (req: Request, res: Response): Promise<Response> => {
         const { userId } = req.params as unknown as { userId: Types.ObjectId };
         const { role }: { role: RoleEnum } = req.body;
@@ -296,6 +390,19 @@ class userService {
         }
         return SuccessResponse({ res, message: "Role changed successfully" });
     }
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles sending friend request
+     * @example (req: Request, res: Response)
+     * return {message: 'Friend request sent successfully', statusCode: 201}
+     * @returns - Promise<Response>
+     * @throws {BadRequestException} - If the user tries to send a friend request to themselves or if a request is already pending
+     * @throws {NotFoundException} - If the user to whom the request is sent does not exist or has blocked the sender
+     * @throws {BadRequestException} - If the friend request creation fails
+     */
     sendFriendRequest = async (req: Request, res: Response): Promise<Response> => {
         const { toUserId } = req.params as unknown as { toUserId: Types.ObjectId };
         const senderId = req.user?._id as Types.ObjectId;
@@ -330,7 +437,18 @@ class userService {
         }
         return SuccessResponse({ res, status: 201, message: 'Friend request sent successfully' });
     }
-
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles accepting friend request
+     * @example (req: Request, res: Response)
+     * return {message: 'Friend request accepted successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {NotFoundException} - If the friend request is not found or already responded to
+     * @throws {BadRequestException} - If the acceptance fails
+     */
     acceptRequest = async (req: Request, res: Response): Promise<Response> => {
         const { requestId } = req.params as unknown as { requestId: Types.ObjectId };
         const friendRequest = await this.friendRequestModel.findOneAndUpdate({
@@ -349,7 +467,18 @@ class userService {
         }
         return SuccessResponse({ res, message: 'Friend request accepted successfully' });
     }
-
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles rejecting friend request
+     * @example (req: Request, res: Response)
+     * return {message: 'Friend request rejected successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {NotFoundException} - If the friend request is not found or already responded to
+     * @throws {BadRequestException} - If the rejection fails
+     */
     rejectRequest = async (req: Request, res: Response): Promise<Response> => {
         const { requestId } = req.params as unknown as { requestId: Types.ObjectId };
         const friendRequest = await this.friendRequestModel.findOneAndDelete({
@@ -360,7 +489,18 @@ class userService {
         }
         return SuccessResponse({ res, message: 'Friend request rejected successfully' });
     }
-
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles removing a friend
+     * @example (req: Request, res: Response)
+     * return {message: 'Friend removed successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {NotFoundException} - If the friend is not found in the user's friends list
+     * @throws {BadRequestException} - If the removal fails
+     */
     removeFriend = async (req: Request, res: Response): Promise<Response> => {
         const { friendId } = req.params as unknown as { friendId: Types.ObjectId };
         const user = await this.userModel.findOne({ filter: { _id: friendId, friends: { $in: [req.user?._id] } } });
@@ -377,6 +517,18 @@ class userService {
         await this.friendRequestModel.deleteOne({filter:{$or: [{sender: req.user?._id, receiver: friendId}, {sender: friendId, receiver: req.user?._id}]}});
         return SuccessResponse({ res, message: 'Friend removed successfully' });
     }
+    /**
+     * 
+     * @param req -Request
+     * @param res -Response
+     * @returns - Promise<Response>
+     * @description - This function handles blocking a user
+     * @example (req: Request, res: Response)
+     * return {message: 'User blocked successfully', statusCode: 200}
+     * @returns - Promise<Response>
+     * @throws {BadRequestException} - If the user tries to block themselves
+     * @throws {NotFoundException} - If the user is not found or already blocked
+     */
     blockUser = async (req: Request, res: Response): Promise<Response> => {
         const { userId } = req.params as unknown as { userId: Types.ObjectId };
         const senderId = req.user?._id as Types.ObjectId;
@@ -390,6 +542,18 @@ class userService {
         await this.userModel.updateOne({ filter: { _id: req.user?._id }, update: { $addToSet: { blockedUsers: userId } } });
         return SuccessResponse({ res, message: 'User blocked successfully' });
     }
+    /**
+     * 
+     * @param req - Request
+     * @param res - Response
+     * @returns - Promise<Response>
+     * @description - This function handles unblocking a user
+     * @example (req: Request, res: Response)
+     * return {message: 'User unblocked successfully', statusCode: 200}
+     * @throws {NotFoundException} - If user is not found or not blocked
+     * @throws {BadRequestException} - If the unblocking fails
+     * @example (req: Request, res: Response): Promise<Response>
+     */
     unBlockUser = async (req: Request, res: Response): Promise<Response> => {
         const { userId } = req.params as unknown as { userId: Types.ObjectId };
         const isAlreadyBlocked = await this.userModel.findOne({ filter: { _id: req.user?._id, blockedUsers: userId } });
