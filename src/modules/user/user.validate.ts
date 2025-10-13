@@ -82,3 +82,16 @@ export const removeFriendValidate = {
         friendId: generalFieldValidator.id
     })
 }
+export const getProfileValidate = {
+    params: z.strictObject({
+        userId: generalFieldValidator.id.optional()
+    })
+}
+export const blockUserValidate = {
+    params: z.strictObject({
+        userId: generalFieldValidator.id
+    })
+}
+export const unBlockUserValidate = {
+    params: blockUserValidate.params
+}

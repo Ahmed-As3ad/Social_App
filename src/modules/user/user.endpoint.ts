@@ -19,6 +19,9 @@ const endPoint: { [key: string]: string } = {
     acceptRequest: '/:requestId/accept-friend-request',
     rejectRequest: '/:requestId/reject-friend-request',
     removeFriend: '/:friendId/remove-friend',
+    getProfile: '/:userId/profile',
+    blockUser: '/:userId/block',
+    unBlockUser: '/:userId/unblock',
     // changePassword: '/change-password'
 }
 export default endPoint;

@@ -24,4 +24,8 @@ router.post(endPoint.sendRequest!, authentication(), validation(validate.sendFri
 router.patch(endPoint.acceptRequest!, authentication(), validation(validate.acceptRequestValidate), userService.acceptRequest)
 router.delete(endPoint.rejectRequest!, authentication(), validation(validate.rejectRequestValidate), userService.rejectRequest)
 router.delete(endPoint.removeFriend!, authentication(), validation(validate.removeFriendValidate), userService.removeFriend)
+router.get(endPoint.getProfile!, authentication(), validation(validate.getProfileValidate), userService.getProfile)
+router.post(endPoint.blockUser!, authentication(), validation(validate.blockUserValidate), userService.blockUser)
+router.post(endPoint.unBlockUser!, authentication(), validation(validate.unBlockUserValidate), userService.unBlockUser)
+// router.patch(endPoint.changePassword!, authentication(), validation(changePasswordValidate), userService.changePassword)
 export default router;

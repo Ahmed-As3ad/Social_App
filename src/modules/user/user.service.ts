@@ -32,6 +32,14 @@ class userService {
         }
         return SuccessResponse<IUserSuccess>({ res, message: "user profile", data: { user: req.user } });
     }
+    getProfile = async (req: Request, res: Response): Promise<Response> => {
+        const { userId } = req.params as unknown as { userId?: Types.ObjectId };
+        const user = await this.userModel.findOne({ filter: { _id: userId, blockedUsers: { $ne: req.user?._id } },select: '-password -resetPasswordOtp -otpExpire -changeCredentialsTime -confirmedEmailOtp -confirmedAt -provider -updatedAt -__v' });
+        if (!user) {
+            throw new NotFoundException('User not found or blocked you');
+        }
+        return SuccessResponse<IUserSuccess>({ res, message: "user profile", data: { user } });
+    }
 
     /**
      * @param req - Express Request
@@ -305,9 +313,9 @@ class userService {
         if (existingRequest) {
             throw new BadRequestException('Friend request already sent and pending');
         }
-        const user = await this.userModel.findOne({ filter: { _id: toUserId, $ne: req.user?._id } });
+        const user = await this.userModel.findOne({ filter: { _id: toUserId, blockedUsers: { $ne: senderId } } });
         if (!user) {
-            throw new NotFoundException('User not found or cannot send friend request to yourself');
+            throw new NotFoundException('User not found or cannot send friend request to this user');
         }
         const friendRequest = await this.friendRequestModel.create({
             data: [
@@ -368,6 +376,28 @@ class userService {
         }
         await this.friendRequestModel.deleteOne({filter:{$or: [{sender: req.user?._id, receiver: friendId}, {sender: friendId, receiver: req.user?._id}]}});
         return SuccessResponse({ res, message: 'Friend removed successfully' });
+    }
+    blockUser = async (req: Request, res: Response): Promise<Response> => {
+        const { userId } = req.params as unknown as { userId: Types.ObjectId };
+        const senderId = req.user?._id as Types.ObjectId;
+        if(senderId.equals(userId)) {
+            throw new BadRequestException('Cannot block yourself');
+        }
+        const isAlreadyBlocked  = await this.userModel.findOne({ filter: { _id: req.user?._id, blockedUsers: userId } });
+        if (isAlreadyBlocked ) {
+            throw new NotFoundException('User not found or already blocked');
+        }
+        await this.userModel.updateOne({ filter: { _id: req.user?._id }, update: { $addToSet: { blockedUsers: userId } } });
+        return SuccessResponse({ res, message: 'User blocked successfully' });
+    }
+    unBlockUser = async (req: Request, res: Response): Promise<Response> => {
+        const { userId } = req.params as unknown as { userId: Types.ObjectId };
+        const isAlreadyBlocked = await this.userModel.findOne({ filter: { _id: req.user?._id, blockedUsers: userId } });
+        if (!isAlreadyBlocked) {
+            throw new NotFoundException('User not found or not blocked');
+        }
+        await this.userModel.updateOne({ filter: { _id: req.user?._id }, update: { $pull: { blockedUsers: userId } } });
+        return SuccessResponse({ res, message: 'User unblocked successfully' });
     }
 }
 

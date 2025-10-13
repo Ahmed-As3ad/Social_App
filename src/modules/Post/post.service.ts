@@ -9,6 +9,8 @@ import { AWS_DeleteFiles, AWS_UploadFiles } from "../../utils/multer/s3.config.j
 import { v4 as uuid } from 'uuid'
 import { likePostDTO } from "./post.DTO.js";
 import { Types, UpdateQuery } from "mongoose";
+import { CommentRepository } from "../../DB/repository/comment.repository.js";
+import CommentModel from "../../DB/model/Comment.model.js";
 
 
 export const postAvailability = (req: Request) => {
@@ -27,6 +29,7 @@ export const postAvailability = (req: Request) => {
 class PostService {
     private userModel = new UserRepository(UserModel);
     private postModel = new PostRepository(PostModel);
+    private commentModel = new CommentRepository(CommentModel);
     constructor() { }
 
     /**
@@ -139,7 +142,7 @@ class PostService {
         let { page, size } = req.query as unknown as { page?: number, size?: number };
         const posts = await this.postModel.pagination({
             filter: { $or: postAvailability(req) },
-            options: { populate: [{ path: 'comments', match: { commentId: { $exists: false }, freezedAt: { $exists: false } }, populate: [{ path: 'replies', match: { freezedAt: { $exists: false } } }] }]  },
+            options: { populate: [{ path: 'comments', match: { commentId: { $exists: false }, freezedAt: { $exists: false } }, populate: [{ path: 'replies', match: { freezedAt: { $exists: false } } }] }] },
             page: page!,
             size: size!,
         })
@@ -153,6 +156,41 @@ class PostService {
         // console.log(`posts: ${posts}`);
 
         return SuccessResponse({ res, status: 200, message: 'Posts fetched', data: { posts } });
+    }
+    freezePost = async (req: Request, res: Response): Promise<Response> => {
+        const { postId } = req.params as unknown as { postId: Types.ObjectId };
+        const post = await this.postModel.findOneAndUpdate({ filter: { _id: postId, freezedAt: { $exists: false } }, update: { freezedAt: new Date(), freezedBy: req.user?._id } });
+        if (!post) throw new NotFoundException('Post not found');
+        return SuccessResponse({ res, status: 200, message: 'Post freezed successfully' });
+
+    }
+    unFreezePost = async (req: Request, res: Response): Promise<Response> => {
+        const { postId } = req.params as unknown as { postId: Types.ObjectId };
+        const post = await this.postModel.findOneAndUpdate({ filter: { _id: postId, freezedAt: { $exists: true } }, update: { $unset: { freezedAt: 1, freezedBy: 1 }, restoredAt: new Date(), restoredBy: req.user?._id } });
+        if (!post) throw new NotFoundException('Post not found');
+        return SuccessResponse({ res, status: 200, message: 'Post unfreezed successfully' });
+    }
+    deletePost = async (req: Request, res: Response): Promise<Response> => {
+        const { userId } = req.params as unknown as { userId: Types.ObjectId };
+        const { postId } = req.params as unknown as { postId: Types.ObjectId };
+        const post = await this.postModel.findOne({ filter: { _id: postId, author: userId || req.user?._id } });
+        if (!post) throw new NotFoundException('Post not found or you are not the author');
+        const allComments = await this.commentModel.find({ filter: { postId } });
+        const commentAttachments = allComments.flatMap(comment => comment.attachments || []);
+        
+        await Promise.all([
+            this.postModel.deleteOne({ filter: { _id: postId } }),
+            this.commentModel.deleteMany({ filter: { postId } }),
+            post?.attachments?.length ? AWS_DeleteFiles({ urls: post.attachments }) : Promise.resolve(),
+            commentAttachments.length ? AWS_DeleteFiles({ urls: commentAttachments }) : Promise.resolve()
+        ])
+        return SuccessResponse({ res, status: 200, message: 'Post deleted successfully' });
+    }
+    getPostById = async (req: Request, res: Response): Promise<Response> => {
+        const { postId } = req.params as unknown as { postId: Types.ObjectId };
+        const post = await this.postModel.findOne({ filter: { _id: postId, $or: postAvailability(req) }, options: { populate: [{ path: 'comments', match: { commentId: { $exists: false }, freezedAt: { $exists: false } }, populate: [{ path: 'replies', match: { freezedAt: { $exists: false } } }] }] } });
+        if (!post) throw new NotFoundException('Post not found');
+        return SuccessResponse({ res, status: 200, message: 'Post fetched', data: { post } });
     }
 }
 

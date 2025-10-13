@@ -91,3 +91,25 @@ export const likePost = {
         action: z.enum(likeActionEnum).default(likeActionEnum.like)
     })
 }
+
+export const freezePost = {
+    params: z.strictObject({
+        postId: generalFieldValidator.id
+    })
+}
+export const unFreezePost = {
+    params: freezePost.params
+}
+export const deletePost = {
+    params: z.strictObject({
+        userId: generalFieldValidator.id
+    }),
+    body: z.strictObject({
+        postId: generalFieldValidator.id
+    })
+}
+export const getPostById = {
+    params: z.strictObject({
+        postId: generalFieldValidator.id
+    })
+}
