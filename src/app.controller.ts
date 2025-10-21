@@ -10,7 +10,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 // import controllers
-import { authRouter, userRouter, postRouter} from './modules';
+import { authRouter, userRouter, postRouter, initializeGateway } from './modules';
 import { BadRequestException, handleError } from './utils/response/error.response';
 import connectDb from './DB/connect.db.js';
 import { AWS_GetFileStream } from './utils/multer/s3.config.js';
@@ -18,6 +18,7 @@ import { promisify } from 'node:util'
 import { pipeline } from 'node:stream';
 
 const pipe = promisify(pipeline);
+
 // initialize rate limiter
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -35,7 +36,13 @@ const bootstrap = async (): Promise<void> => {
 
     // DB
     await connectDb()
+    // const users = [
+    //     { id: '1', name: 'John Doe', email: 'user@example.com' },
+    //     { id: '2', name: 'Jane Smith', email: 'jane@example.com' },
+    //     { id: '3', name: 'Alice Johnson', email: 'alice@example.com' }
+    // ]
 
+    // app.all('/graphql', createHandler({ schema }));
     // landing page route
     app.get('/', (req: Request, res: Response) => {
         res.json({ message: `welcome to ${process.env.APPLICATION_NAME} backend landing page❤️` });
@@ -91,10 +98,12 @@ const bootstrap = async (): Promise<void> => {
 
     // }
     // // test();
-
-    app.listen(port, () => {
+   
+    const server = app.listen(port, () => {
         console.log(`app is running at http://localhost:${port}🎉`);
     });
+    initializeGateway(server);
+   
 }
 
 export default bootstrap;

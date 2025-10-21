@@ -7,7 +7,9 @@ import { validation } from "../../middleware/validation.middleware.js";
 import { cloudMulter, storageTypeEnum } from "../../utils/multer/cloud.multer.js";
 import { authorization } from "../../middleware/authorizition.middleware.js";
 import { RoleEnum } from "../../DB/model/User.model.js";
+import { chatController } from "../chat/index.js";
 const router: Router = Router();
+router.use(endPoint.chat!, chatController)
 router.get(endPoint.profile!, authentication(), userService.profile)
 router.get(endPoint.dashboard!, authorization([RoleEnum.superAdmin]), userService.dashboard)
 router.patch(endPoint.changeRole!, authorization([RoleEnum.superAdmin, RoleEnum.admin]), validation(validate.changeRoleValidate), userService.changeRole)

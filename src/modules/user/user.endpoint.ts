@@ -1,5 +1,6 @@
 
 const endPoint: { [key: string]: string } = {
+    chat:'/:userId/chat',
     profile: '/profile',
     dashboard: '/dashboard',
     changeRole: '/:userId/change-role',
